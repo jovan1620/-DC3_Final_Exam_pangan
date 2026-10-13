@@ -37,7 +37,10 @@ function loadData() {
     if (!saved) return structuredClone(sampleData)
 
     const parsed = JSON.parse(saved)
-    if (Array.isArray(parsed.items) && Array.isArray(parsed.orders)) return parsed
+    if (Array.isArray(parsed.items) && Array.isArray(parsed.orders)) {
+      parsed.items = parsed.items.map((item) => normalizeItemAvailability({ ...item }))
+      return parsed
+    }
 
     console.error('Saved canteen data has an unexpected format; sample data will be loaded.')
   } catch (error) {
@@ -45,6 +48,13 @@ function loadData() {
   }
 
   return structuredClone(sampleData)
+}
+
+function normalizeItemAvailability(item) {
+  if (!item) return item
+  const isAvailable = item.available ?? true
+  item.available = Boolean(isAvailable) && Number(item.stock) > 0
+  return item
 }
 
 const state = reactive(loadData())
@@ -73,12 +83,13 @@ function makeId(prefix) {
 }
 
 function saveItem(item) {
-  if (item.id) {
-    const index = state.items.findIndex((existing) => existing.id === item.id)
-    if (index !== -1) state.items[index] = { ...item }
+  const normalizedItem = normalizeItemAvailability({ ...item })
+  if (normalizedItem.id) {
+    const index = state.items.findIndex((existing) => existing.id === normalizedItem.id)
+    if (index !== -1) state.items[index] = normalizedItem
     return
   }
-  state.items.unshift({ ...item, id: makeId('item') })
+  state.items.unshift({ ...normalizedItem, id: makeId('item') })
 }
 
 function deleteItem(id) {
@@ -92,7 +103,7 @@ function updateStock(id, stock) {
   const item = state.items.find((entry) => entry.id === id)
   if (!item) throw new Error('The selected inventory item no longer exists.')
   item.stock = stock
-  item.available = stock > 0
+  normalizeItemAvailability(item)
 }
 
 function restoreOrderStock(order) {
@@ -100,7 +111,7 @@ function restoreOrderStock(order) {
     const item = state.items.find((entry) => entry.id === line.itemId)
     if (item) {
       item.stock += line.quantity
-      item.available = item.stock > 0
+      normalizeItemAvailability(item)
     }
   }
 }
@@ -115,7 +126,7 @@ function subtractOrderStock(lines) {
   for (const line of lines) {
     const item = state.items.find((entry) => entry.id === line.itemId)
     item.stock -= line.quantity
-    item.available = item.stock > 0
+    normalizeItemAvailability(item)
   }
 }
 
